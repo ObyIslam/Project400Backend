@@ -1,18 +1,33 @@
 package com.example.Project400Backend.Models;
 
+import jakarta.persistence.*;
+import java.util.List;
+
+@Entity
 public class Workout {
-    private int id;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
     private String name;
-    private String type; // muscle group
 
-    public Workout(int id, String name, String type) {
-        this.id = id;
-        this.name = name;
-        this.type = type;
-    }
+    private boolean finished;
 
-    // Getters (needed for JSON serialization)
-    public int getId() { return id; }
+    @ManyToMany
+    private List<Exercise> exercises;
+
+    public Workout() {}
+
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+
     public String getName() { return name; }
-    public String getType() { return type; }
+    public void setName(String name) { this.name = name; }
+
+    public boolean isFinished() { return finished; }
+    public void setFinished(boolean finished) { this.finished = finished; }
+
+    public List<Exercise> getExercises() { return exercises; }
+    public void setExercises(List<Exercise> exercises) { this.exercises = exercises; }
 }
