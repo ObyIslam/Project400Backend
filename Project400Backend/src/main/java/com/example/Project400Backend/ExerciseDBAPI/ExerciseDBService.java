@@ -12,7 +12,7 @@ public class ExerciseDBService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     private final String BASE_URL = "https://exercisedb.p.rapidapi.com/exercises";
-    private final String RAPIDAPI_KEY = "b019b4bebcmsh2af8ae36a539d06p14b001jsn72bfbe762a33";
+    private final String RAPIDAPI_KEY = "";
     private final String RAPIDAPI_HOST = "exercisedb.p.rapidapi.com";
 
 
