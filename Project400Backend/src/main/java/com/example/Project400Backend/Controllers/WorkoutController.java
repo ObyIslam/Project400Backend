@@ -1,18 +1,14 @@
 package com.example.Project400Backend.Controllers;
 
+import com.example.Project400Backend.ExerciseDBAPI.ExerciseDBExercise;
+import com.example.Project400Backend.ExerciseDBAPI.ExerciseDBService;
 import com.example.Project400Backend.Models.Exercise;
 import com.example.Project400Backend.Models.Workout;
 import com.example.Project400Backend.Repositories.ExerciseRepository;
 import com.example.Project400Backend.Repositories.WorkoutRepository;
-
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
-import tools.jackson.databind.ObjectMapper;
 
-import java.io.InputStream;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -22,39 +18,51 @@ public class WorkoutController {
 
     private final WorkoutRepository workoutRepository;
     private final ExerciseRepository exerciseRepository;
+    private final ExerciseDBService exerciseDBService;
 
-    public WorkoutController(WorkoutRepository workoutRepository, ExerciseRepository exerciseRepository) {
+    public WorkoutController(WorkoutRepository workoutRepository,
+                             ExerciseRepository exerciseRepository,
+                             ExerciseDBService exerciseDBService) {
         this.workoutRepository = workoutRepository;
         this.exerciseRepository = exerciseRepository;
-    }
-
-    @EventListener(ApplicationReadyEvent.class)
-    public void initExercises() {
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            InputStream is = new ClassPathResource("workouts.json").getInputStream();
-            Exercise[] exercises = mapper.readValue(is, Exercise[].class);
-
-            for (Exercise e : exercises) {
-                if (!exerciseRepository.existsById(e.getId())) {
-                    exerciseRepository.save(e);
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        this.exerciseDBService = exerciseDBService;
     }
 
     @GetMapping("/exercises")
-    public List<Exercise> getAllExercises() {
-        return exerciseRepository.findAll();
+    public List<ExerciseDBExercise> getAllExercises() {
+        return exerciseDBService.fetchAllExercises();
+    }
+
+    @GetMapping("/exercises/{id}/image")
+    public ResponseEntity<byte[]> getExerciseImage(@PathVariable String id) {
+        String url = "https://exercisedb.p.rapidapi.com/image?resolution=720&exerciseId=" + id;
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-RapidAPI-Key", exerciseDBService.getRapidApiKey());
+        headers.set("X-RapidAPI-Host", "exercisedb.p.rapidapi.com");
+        HttpEntity<String> entity = new HttpEntity<>(headers);
+        try {
+            ResponseEntity<byte[]> response = exerciseDBService.getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    byte[].class
+            );
+            HttpHeaders respHeaders = new HttpHeaders();
+            respHeaders.setContentType(MediaType.IMAGE_GIF);
+            return new ResponseEntity<>(response.getBody(), respHeaders, HttpStatus.OK);
+        } catch (Exception e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @PostMapping("/user")
     public Workout addUserWorkout(@RequestBody Workout workout) {
         List<Exercise> savedExercises = workout.getExercises().stream()
-                .map(e -> exerciseRepository.findById(e.getId())
-                        .orElseThrow(() -> new RuntimeException("Exercise not found: " + e.getId())))
+                .map(e -> {
+                    // Save exercise if it doesn’t exist in DB
+                    return exerciseRepository.findById(e.getId())
+                            .orElseGet(() -> exerciseRepository.save(e));
+                })
                 .collect(Collectors.toList());
 
         workout.setExercises(savedExercises);
@@ -62,14 +70,12 @@ public class WorkoutController {
         return workoutRepository.save(workout);
     }
 
-
     @GetMapping("/user")
     public List<Workout> getUserWorkouts() {
         return workoutRepository.findAll();
     }
 
     @PostMapping("/user/{id}/finish")
-    @Transactional
     public Workout finishWorkout(@PathVariable Long id) {
         Workout workout = workoutRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Workout not found"));
