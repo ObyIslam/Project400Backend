@@ -1,16 +1,13 @@
 package com.example.Project400Backend.Controllers;
 
-import com.example.Project400Backend.ExerciseDBAPI.ExerciseDBExercise;
-import com.example.Project400Backend.ExerciseDBAPI.ExerciseDBService;
 import com.example.Project400Backend.Models.Exercise;
 import com.example.Project400Backend.Models.Workout;
 import com.example.Project400Backend.Repositories.ExerciseRepository;
 import com.example.Project400Backend.Repositories.WorkoutRepository;
-import org.springframework.http.*;
+import com.example.Project400Backend.freeexercisedb.FreeExerciseDbService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/workouts")
@@ -18,52 +15,53 @@ public class WorkoutController {
 
     private final WorkoutRepository workoutRepository;
     private final ExerciseRepository exerciseRepository;
-    private final ExerciseDBService exerciseDBService;
+    private final FreeExerciseDbService freeExerciseDbService;
 
     public WorkoutController(WorkoutRepository workoutRepository,
                              ExerciseRepository exerciseRepository,
-                             ExerciseDBService exerciseDBService) {
+                             FreeExerciseDbService freeExerciseDbService) {
         this.workoutRepository = workoutRepository;
         this.exerciseRepository = exerciseRepository;
-        this.exerciseDBService = exerciseDBService;
+        this.freeExerciseDbService = freeExerciseDbService;
     }
 
     @GetMapping("/exercises")
-    public List<ExerciseDBExercise> getAllExercises() {
-        return exerciseDBService.fetchAllExercises();
-    }
+    public com.example.Project400Backend.freeexercisedb.PagedResponse<Exercise> getExercises(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "80") int limit,
+            @RequestParam(required = false) String q
+    ) {
+        var list = freeExerciseDbService.list(page, limit, q);
+        long count = freeExerciseDbService.totalCount(q);
 
-    @GetMapping("/exercises/{id}/image")
-    public ResponseEntity<byte[]> getExerciseImage(@PathVariable String id) {
-        String url = "https://exercisedb.p.rapidapi.com/image?resolution=720&exerciseId=" + id;
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("X-RapidAPI-Key", exerciseDBService.getRapidApiKey());
-        headers.set("X-RapidAPI-Host", "exercisedb.p.rapidapi.com");
-        HttpEntity<String> entity = new HttpEntity<>(headers);
-        try {
-            ResponseEntity<byte[]> response = exerciseDBService.getRestTemplate().exchange(
-                    url,
-                    HttpMethod.GET,
-                    entity,
-                    byte[].class
-            );
-            HttpHeaders respHeaders = new HttpHeaders();
-            respHeaders.setContentType(MediaType.IMAGE_GIF);
-            return new ResponseEntity<>(response.getBody(), respHeaders, HttpStatus.OK);
-        } catch (Exception e) {
-            return ResponseEntity.notFound().build();
-        }
+        List<Exercise> mapped = list.stream().map(dto ->
+                exerciseRepository.findByExternalId(dto.id())
+                        .orElseGet(() -> {
+                            Exercise e = new Exercise();
+                            e.setExternalId(dto.id());
+                            e.setName(dto.name());
+
+                            if (dto.primaryMuscles() != null && !dto.primaryMuscles().isEmpty()) {
+                                e.setCategory(dto.primaryMuscles().get(0));
+                            }
+
+                            if (dto.images() != null && !dto.images().isEmpty()) {
+                                e.setImageUrl(dto.images().get(0));
+                            }
+
+                            return exerciseRepository.save(e);
+                        })
+        ).toList();
+
+        return new com.example.Project400Backend.freeexercisedb.PagedResponse<>(count, page, limit, mapped);
     }
 
     @PostMapping("/user")
     public Workout addUserWorkout(@RequestBody Workout workout) {
         List<Exercise> savedExercises = workout.getExercises().stream()
-                .map(e -> {
-                    // Save exercise if it doesn’t exist in DB
-                    return exerciseRepository.findById(e.getId())
-                            .orElseGet(() -> exerciseRepository.save(e));
-                })
-                .collect(Collectors.toList());
+                .map(e -> exerciseRepository.findById(e.getId())
+                        .orElseGet(() -> exerciseRepository.save(e)))
+                .toList();
 
         workout.setExercises(savedExercises);
         workout.setFinished(false);
