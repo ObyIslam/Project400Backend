@@ -14,20 +14,40 @@ public class Workout {
 
     private boolean finished;
 
-    @ManyToMany
-    private List<Exercise> exercises;
+    @OneToMany(cascade = CascadeType.ALL)
+    private List<WorkoutExercise> exercises;
 
     public Workout() {}
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public Long getId() {
+        return id;
+    }
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setId(Long id) {
+        this.id = id;
+    }
 
-    public boolean isFinished() { return finished; }
-    public void setFinished(boolean finished) { this.finished = finished; }
+    public String getName() {
+        return name;
+    }
 
-    public List<Exercise> getExercises() { return exercises; }
-    public void setExercises(List<Exercise> exercises) { this.exercises = exercises; }
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public boolean isFinished() {
+        return finished;
+    }
+
+    public void setFinished(boolean finished) {
+        this.finished = finished;
+    }
+
+    public List<WorkoutExercise> getExercises() {
+        return exercises;
+    }
+
+    public void setExercises(List<WorkoutExercise> exercises) {
+        this.exercises = exercises;
+    }
 }

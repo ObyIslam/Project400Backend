@@ -2,9 +2,14 @@ package com.example.Project400Backend.Controllers;
 
 import com.example.Project400Backend.Models.Exercise;
 import com.example.Project400Backend.Models.Workout;
+import com.example.Project400Backend.Models.WorkoutExercise;
+import com.example.Project400Backend.Models.WorkoutSet;
 import com.example.Project400Backend.Repositories.ExerciseRepository;
+import com.example.Project400Backend.Repositories.WorkoutExerciseRepository;
 import com.example.Project400Backend.Repositories.WorkoutRepository;
+import com.example.Project400Backend.Repositories.WorkoutSetRepository;
 import com.example.Project400Backend.freeexercisedb.FreeExerciseDbService;
+import com.example.Project400Backend.freeexercisedb.PagedResponse;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -15,18 +20,24 @@ public class WorkoutController {
 
     private final WorkoutRepository workoutRepository;
     private final ExerciseRepository exerciseRepository;
+    private final WorkoutExerciseRepository workoutExerciseRepository;
+    private final WorkoutSetRepository workoutSetRepository;
     private final FreeExerciseDbService freeExerciseDbService;
 
     public WorkoutController(WorkoutRepository workoutRepository,
                              ExerciseRepository exerciseRepository,
+                             WorkoutExerciseRepository workoutExerciseRepository,
+                             WorkoutSetRepository workoutSetRepository,
                              FreeExerciseDbService freeExerciseDbService) {
         this.workoutRepository = workoutRepository;
         this.exerciseRepository = exerciseRepository;
+        this.workoutExerciseRepository = workoutExerciseRepository;
+        this.workoutSetRepository = workoutSetRepository;
         this.freeExerciseDbService = freeExerciseDbService;
     }
 
     @GetMapping("/exercises")
-    public com.example.Project400Backend.freeexercisedb.PagedResponse<Exercise> getExercises(
+    public PagedResponse<Exercise> getExercises(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "80") int limit,
             @RequestParam(required = false) String q
@@ -53,18 +64,39 @@ public class WorkoutController {
                         })
         ).toList();
 
-        return new com.example.Project400Backend.freeexercisedb.PagedResponse<>(count, page, limit, mapped);
+        return new PagedResponse<>(count, page, limit, mapped);
     }
 
     @PostMapping("/user")
     public Workout addUserWorkout(@RequestBody Workout workout) {
-        List<Exercise> savedExercises = workout.getExercises().stream()
-                .map(e -> exerciseRepository.findById(e.getId())
-                        .orElseGet(() -> exerciseRepository.save(e)))
+        List<WorkoutExercise> savedWorkoutExercises = workout.getExercises().stream()
+                .map(we -> {
+                    Exercise incomingExercise = we.getExercise();
+
+                    Exercise savedExercise = exerciseRepository.findById(incomingExercise.getId())
+                            .orElseThrow(() -> new RuntimeException("Exercise not found: " + incomingExercise.getId()));
+
+                    List<WorkoutSet> savedSets = we.getSets().stream()
+                            .map(set -> {
+                                WorkoutSet workoutSet = new WorkoutSet();
+                                workoutSet.setReps(set.getReps());
+                                workoutSet.setWeight(set.getWeight());
+                                workoutSet.setCompleted(set.isCompleted());
+                                return workoutSetRepository.save(workoutSet);
+                            })
+                            .toList();
+
+                    WorkoutExercise entry = new WorkoutExercise();
+                    entry.setExercise(savedExercise);
+                    entry.setSets(savedSets);
+
+                    return workoutExerciseRepository.save(entry);
+                })
                 .toList();
 
-        workout.setExercises(savedExercises);
+        workout.setExercises(savedWorkoutExercises);
         workout.setFinished(false);
+
         return workoutRepository.save(workout);
     }
 
