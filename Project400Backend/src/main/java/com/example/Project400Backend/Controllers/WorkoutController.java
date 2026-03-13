@@ -73,8 +73,32 @@ public class WorkoutController {
                 .map(we -> {
                     Exercise incomingExercise = we.getExercise();
 
-                    Exercise savedExercise = exerciseRepository.findById(incomingExercise.getId())
-                            .orElseThrow(() -> new RuntimeException("Exercise not found: " + incomingExercise.getId()));
+                    if (incomingExercise == null) {
+                        throw new RuntimeException("Workout exercise is missing exercise data");
+                    }
+
+                    Exercise savedExercise = null;
+
+                    if (incomingExercise.getId() != null) {
+                        savedExercise = exerciseRepository.findById(incomingExercise.getId()).orElse(null);
+                    }
+
+                    if (savedExercise == null
+                            && incomingExercise.getExternalId() != null
+                            && !incomingExercise.getExternalId().isBlank()) {
+                        savedExercise = exerciseRepository.findByExternalId(incomingExercise.getExternalId()).orElse(null);
+                    }
+
+                    if (savedExercise == null) {
+                        Exercise newExercise = new Exercise();
+                        newExercise.setExternalId(incomingExercise.getExternalId());
+                        newExercise.setName(incomingExercise.getName());
+                        newExercise.setCategory(incomingExercise.getCategory());
+                        newExercise.setDescription(incomingExercise.getDescription());
+                        newExercise.setImageUrl(incomingExercise.getImageUrl());
+
+                        savedExercise = exerciseRepository.save(newExercise);
+                    }
 
                     List<WorkoutSet> savedSets = we.getSets().stream()
                             .map(set -> {
