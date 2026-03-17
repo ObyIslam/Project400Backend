@@ -136,4 +136,12 @@ public class WorkoutController {
         workout.setFinished(true);
         return workoutRepository.save(workout);
     }
+
+    @DeleteMapping("/user/{id}")
+    public void deleteWorkout(@PathVariable Long id) {
+        if (!workoutRepository.existsById(id)) {
+            throw new RuntimeException("Workout not found");
+        }
+        workoutRepository.deleteById(id);
+    }
 }
