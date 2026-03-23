@@ -48,6 +48,6 @@ public class Workout {
     }
 
     public void setExercises(List<WorkoutExercise> exercises) {
-        this.exercises = exercises;
+        this.exercises = new java.util.ArrayList<>(exercises);
     }
 }

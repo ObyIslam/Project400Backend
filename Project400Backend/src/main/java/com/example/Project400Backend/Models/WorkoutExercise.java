@@ -39,6 +39,6 @@ public class WorkoutExercise {
     }
 
     public void setSets(List<WorkoutSet> sets) {
-        this.sets = sets;
+        this.sets = new java.util.ArrayList<>(sets);
     }
 }

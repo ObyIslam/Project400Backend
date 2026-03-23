@@ -13,6 +13,7 @@ import com.example.Project400Backend.freeexercisedb.PagedResponse;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/workouts")
@@ -45,8 +46,8 @@ public class WorkoutController {
         var list = freeExerciseDbService.list(page, limit, q);
         long count = freeExerciseDbService.totalCount(q);
 
-        List<Exercise> mapped = list.stream().map(dto ->
-                exerciseRepository.findByExternalId(dto.id())
+        List<Exercise> mapped = list.stream()
+                .map(dto -> exerciseRepository.findByExternalId(dto.id())
                         .orElseGet(() -> {
                             Exercise e = new Exercise();
                             e.setExternalId(dto.id());
@@ -61,8 +62,8 @@ public class WorkoutController {
                             }
 
                             return exerciseRepository.save(e);
-                        })
-        ).toList();
+                        }))
+                .collect(Collectors.toList());
 
         return new PagedResponse<>(count, page, limit, mapped);
     }
@@ -70,53 +71,8 @@ public class WorkoutController {
     @PostMapping("/user")
     public Workout addUserWorkout(@RequestBody Workout workout) {
         List<WorkoutExercise> savedWorkoutExercises = workout.getExercises().stream()
-                .map(we -> {
-                    Exercise incomingExercise = we.getExercise();
-
-                    if (incomingExercise == null) {
-                        throw new RuntimeException("Workout exercise is missing exercise data");
-                    }
-
-                    Exercise savedExercise = null;
-
-                    if (incomingExercise.getId() != null) {
-                        savedExercise = exerciseRepository.findById(incomingExercise.getId()).orElse(null);
-                    }
-
-                    if (savedExercise == null
-                            && incomingExercise.getExternalId() != null
-                            && !incomingExercise.getExternalId().isBlank()) {
-                        savedExercise = exerciseRepository.findByExternalId(incomingExercise.getExternalId()).orElse(null);
-                    }
-
-                    if (savedExercise == null) {
-                        Exercise newExercise = new Exercise();
-                        newExercise.setExternalId(incomingExercise.getExternalId());
-                        newExercise.setName(incomingExercise.getName());
-                        newExercise.setCategory(incomingExercise.getCategory());
-                        newExercise.setDescription(incomingExercise.getDescription());
-                        newExercise.setImageUrl(incomingExercise.getImageUrl());
-
-                        savedExercise = exerciseRepository.save(newExercise);
-                    }
-
-                    List<WorkoutSet> savedSets = we.getSets().stream()
-                            .map(set -> {
-                                WorkoutSet workoutSet = new WorkoutSet();
-                                workoutSet.setReps(set.getReps());
-                                workoutSet.setWeight(set.getWeight());
-                                workoutSet.setCompleted(set.isCompleted());
-                                return workoutSetRepository.save(workoutSet);
-                            })
-                            .toList();
-
-                    WorkoutExercise entry = new WorkoutExercise();
-                    entry.setExercise(savedExercise);
-                    entry.setSets(savedSets);
-
-                    return workoutExerciseRepository.save(entry);
-                })
-                .toList();
+                .map(this::buildWorkoutExercise)
+                .collect(Collectors.toList());
 
         workout.setExercises(savedWorkoutExercises);
         workout.setFinished(false);
@@ -143,5 +99,90 @@ public class WorkoutController {
             throw new RuntimeException("Workout not found");
         }
         workoutRepository.deleteById(id);
+    }
+
+    @PutMapping("/user/{id}")
+    public Workout updateWorkout(@PathVariable Long id, @RequestBody Workout updatedWorkout) {
+        Workout existingWorkout = workoutRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Workout not found"));
+
+        List<WorkoutExercise> savedWorkoutExercises = updatedWorkout.getExercises().stream()
+                .map(this::buildWorkoutExercise)
+                .collect(Collectors.toList());
+
+        existingWorkout.setName(updatedWorkout.getName());
+        existingWorkout.setFinished(updatedWorkout.isFinished());
+        existingWorkout.setExercises(savedWorkoutExercises);
+
+        return workoutRepository.save(existingWorkout);
+    }
+
+    private WorkoutExercise buildWorkoutExercise(WorkoutExercise we) {
+        Exercise incomingExercise = we.getExercise();
+
+        if (incomingExercise == null) {
+            throw new RuntimeException("Workout exercise is missing exercise data");
+        }
+
+        Exercise savedExercise = resolveExercise(incomingExercise);
+
+        List<WorkoutSet> savedSets = we.getSets().stream()
+                .map(this::buildWorkoutSet)
+                .collect(Collectors.toList());
+
+        WorkoutExercise entry;
+        if (we.getId() != null) {
+            entry = workoutExerciseRepository.findById(we.getId()).orElse(new WorkoutExercise());
+        } else {
+            entry = new WorkoutExercise();
+        }
+
+        entry.setExercise(savedExercise);
+        entry.setSets(savedSets);
+
+        return workoutExerciseRepository.save(entry);
+    }
+
+    private WorkoutSet buildWorkoutSet(WorkoutSet set) {
+        WorkoutSet workoutSet;
+
+        if (set.getId() != null) {
+            workoutSet = workoutSetRepository.findById(set.getId()).orElse(new WorkoutSet());
+        } else {
+            workoutSet = new WorkoutSet();
+        }
+
+        workoutSet.setReps(set.getReps());
+        workoutSet.setWeight(set.getWeight());
+        workoutSet.setCompleted(set.isCompleted());
+
+        return workoutSetRepository.save(workoutSet);
+    }
+
+    private Exercise resolveExercise(Exercise incomingExercise) {
+        Exercise savedExercise = null;
+
+        if (incomingExercise.getId() != null) {
+            savedExercise = exerciseRepository.findById(incomingExercise.getId()).orElse(null);
+        }
+
+        if (savedExercise == null
+                && incomingExercise.getExternalId() != null
+                && !incomingExercise.getExternalId().isBlank()) {
+            savedExercise = exerciseRepository.findByExternalId(incomingExercise.getExternalId()).orElse(null);
+        }
+
+        if (savedExercise == null) {
+            Exercise newExercise = new Exercise();
+            newExercise.setExternalId(incomingExercise.getExternalId());
+            newExercise.setName(incomingExercise.getName());
+            newExercise.setCategory(incomingExercise.getCategory());
+            newExercise.setDescription(incomingExercise.getDescription());
+            newExercise.setImageUrl(incomingExercise.getImageUrl());
+
+            savedExercise = exerciseRepository.save(newExercise);
+        }
+
+        return savedExercise;
     }
 }
