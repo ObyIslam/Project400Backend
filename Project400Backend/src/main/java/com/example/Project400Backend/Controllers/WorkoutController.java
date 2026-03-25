@@ -1,16 +1,21 @@
 package com.example.Project400Backend.Controllers;
 
 import com.example.Project400Backend.Models.Exercise;
+import com.example.Project400Backend.Models.User;
 import com.example.Project400Backend.Models.Workout;
 import com.example.Project400Backend.Models.WorkoutExercise;
 import com.example.Project400Backend.Models.WorkoutSet;
 import com.example.Project400Backend.Repositories.ExerciseRepository;
+import com.example.Project400Backend.Repositories.UserRepository;
 import com.example.Project400Backend.Repositories.WorkoutExerciseRepository;
 import com.example.Project400Backend.Repositories.WorkoutRepository;
 import com.example.Project400Backend.Repositories.WorkoutSetRepository;
 import com.example.Project400Backend.freeexercisedb.FreeExerciseDbService;
 import com.example.Project400Backend.freeexercisedb.PagedResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -24,17 +29,20 @@ public class WorkoutController {
     private final WorkoutExerciseRepository workoutExerciseRepository;
     private final WorkoutSetRepository workoutSetRepository;
     private final FreeExerciseDbService freeExerciseDbService;
+    private final UserRepository userRepository;
 
     public WorkoutController(WorkoutRepository workoutRepository,
                              ExerciseRepository exerciseRepository,
                              WorkoutExerciseRepository workoutExerciseRepository,
                              WorkoutSetRepository workoutSetRepository,
-                             FreeExerciseDbService freeExerciseDbService) {
+                             FreeExerciseDbService freeExerciseDbService,
+                             UserRepository userRepository) {
         this.workoutRepository = workoutRepository;
         this.exerciseRepository = exerciseRepository;
         this.workoutExerciseRepository = workoutExerciseRepository;
         this.workoutSetRepository = workoutSetRepository;
         this.freeExerciseDbService = freeExerciseDbService;
+        this.userRepository = userRepository;
     }
 
     @GetMapping("/exercises")
@@ -69,42 +77,50 @@ public class WorkoutController {
     }
 
     @PostMapping("/user")
-    public Workout addUserWorkout(@RequestBody Workout workout) {
+    public Workout addUserWorkout(@RequestBody Workout workout, Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+
         List<WorkoutExercise> savedWorkoutExercises = workout.getExercises().stream()
                 .map(this::buildWorkoutExercise)
                 .collect(Collectors.toList());
 
         workout.setExercises(savedWorkoutExercises);
         workout.setFinished(false);
+        workout.setUser(currentUser);
 
         return workoutRepository.save(workout);
     }
 
     @GetMapping("/user")
-    public List<Workout> getUserWorkouts() {
-        return workoutRepository.findAll();
+    public List<Workout> getUserWorkouts(Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+        return workoutRepository.findByUserIdOrderByIdDesc(currentUser.getId());
     }
 
     @PostMapping("/user/{id}/finish")
-    public Workout finishWorkout(@PathVariable Long id) {
-        Workout workout = workoutRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Workout not found"));
+    public Workout finishWorkout(@PathVariable Long id, Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+        Workout workout = workoutRepository.findByIdAndUserId(id, currentUser.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workout not found"));
         workout.setFinished(true);
         return workoutRepository.save(workout);
     }
 
     @DeleteMapping("/user/{id}")
-    public void deleteWorkout(@PathVariable Long id) {
-        if (!workoutRepository.existsById(id)) {
-            throw new RuntimeException("Workout not found");
-        }
-        workoutRepository.deleteById(id);
+    public void deleteWorkout(@PathVariable Long id, Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+        Workout workout = workoutRepository.findByIdAndUserId(id, currentUser.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workout not found"));
+        workoutRepository.delete(workout);
     }
 
     @PutMapping("/user/{id}")
-    public Workout updateWorkout(@PathVariable Long id, @RequestBody Workout updatedWorkout) {
-        Workout existingWorkout = workoutRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Workout not found"));
+    public Workout updateWorkout(@PathVariable Long id,
+                                 @RequestBody Workout updatedWorkout,
+                                 Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+        Workout existingWorkout = workoutRepository.findByIdAndUserId(id, currentUser.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workout not found"));
 
         List<WorkoutExercise> savedWorkoutExercises = updatedWorkout.getExercises().stream()
                 .map(this::buildWorkoutExercise)
@@ -113,15 +129,25 @@ public class WorkoutController {
         existingWorkout.setName(updatedWorkout.getName());
         existingWorkout.setFinished(updatedWorkout.isFinished());
         existingWorkout.setExercises(savedWorkoutExercises);
+        existingWorkout.setUser(currentUser);
 
         return workoutRepository.save(existingWorkout);
+    }
+
+    private User getCurrentUser(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized");
+        }
+
+        return userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
     }
 
     private WorkoutExercise buildWorkoutExercise(WorkoutExercise we) {
         Exercise incomingExercise = we.getExercise();
 
         if (incomingExercise == null) {
-            throw new RuntimeException("Workout exercise is missing exercise data");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Workout exercise is missing exercise data");
         }
 
         Exercise savedExercise = resolveExercise(incomingExercise);

@@ -1,5 +1,6 @@
 package com.example.Project400Backend.Models;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.util.List;
 
@@ -16,6 +17,11 @@ public class Workout {
 
     @OneToMany(cascade = CascadeType.ALL)
     private List<WorkoutExercise> exercises;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     public Workout() {}
 
@@ -49,5 +55,13 @@ public class Workout {
 
     public void setExercises(List<WorkoutExercise> exercises) {
         this.exercises = new java.util.ArrayList<>(exercises);
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 }

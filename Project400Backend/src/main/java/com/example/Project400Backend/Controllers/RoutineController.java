@@ -69,7 +69,7 @@ public class RoutineController {
                                 WorkoutSet workoutSet = new WorkoutSet();
                                 workoutSet.setReps(set.getReps());
                                 workoutSet.setWeight(set.getWeight());
-                                workoutSet.setCompleted(false); // routines are templates
+                                workoutSet.setCompleted(false);
                                 return workoutSetRepository.save(workoutSet);
                             })
                             .toList();
