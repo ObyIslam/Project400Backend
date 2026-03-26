@@ -2,12 +2,15 @@ package com.example.Project400Backend.Controllers;
 
 import com.example.Project400Backend.Models.Exercise;
 import com.example.Project400Backend.Models.Routine;
+import com.example.Project400Backend.Models.User;
 import com.example.Project400Backend.Models.WorkoutExercise;
 import com.example.Project400Backend.Models.WorkoutSet;
 import com.example.Project400Backend.Repositories.ExerciseRepository;
 import com.example.Project400Backend.Repositories.RoutineRepository;
+import com.example.Project400Backend.Repositories.UserRepository;
 import com.example.Project400Backend.Repositories.WorkoutExerciseRepository;
 import com.example.Project400Backend.Repositories.WorkoutSetRepository;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,19 +23,27 @@ public class RoutineController {
     private final ExerciseRepository exerciseRepository;
     private final WorkoutExerciseRepository workoutExerciseRepository;
     private final WorkoutSetRepository workoutSetRepository;
+    private final UserRepository userRepository;
 
     public RoutineController(RoutineRepository routineRepository,
                              ExerciseRepository exerciseRepository,
                              WorkoutExerciseRepository workoutExerciseRepository,
-                             WorkoutSetRepository workoutSetRepository) {
+                             WorkoutSetRepository workoutSetRepository,
+                             UserRepository userRepository) {
         this.routineRepository = routineRepository;
         this.exerciseRepository = exerciseRepository;
         this.workoutExerciseRepository = workoutExerciseRepository;
         this.workoutSetRepository = workoutSetRepository;
+        this.userRepository = userRepository;
     }
 
     @PostMapping
-    public Routine addRoutine(@RequestBody Routine routine) {
+    public Routine addRoutine(@RequestBody Routine routine, Authentication authentication) {
+        String email = authentication.getName();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
         List<WorkoutExercise> savedExercises = routine.getExercises().stream()
                 .map(re -> {
                     Exercise incomingExercise = re.getExercise();
@@ -83,22 +94,32 @@ public class RoutineController {
                 .toList();
 
         routine.setExercises(savedExercises);
+        routine.setUser(user);
+
         return routineRepository.save(routine);
     }
 
-    @GetMapping
-    public List<Routine> getRoutines() {
-        return routineRepository.findAll();
+    @GetMapping("/user")
+    public List<Routine> getUserRoutines(Authentication authentication) {
+        String email = authentication.getName();
+        return routineRepository.findByUserEmail(email);
     }
 
     @GetMapping("/{id}")
-    public Routine getRoutine(@PathVariable Long id) {
-        return routineRepository.findById(id)
+    public Routine getRoutine(@PathVariable Long id, Authentication authentication) {
+        String email = authentication.getName();
+
+        return routineRepository.findByIdAndUserEmail(id, email)
                 .orElseThrow(() -> new RuntimeException("Routine not found"));
     }
 
     @DeleteMapping("/{id}")
-    public void deleteRoutine(@PathVariable Long id) {
-        routineRepository.deleteById(id);
+    public void deleteRoutine(@PathVariable Long id, Authentication authentication) {
+        String email = authentication.getName();
+
+        Routine routine = routineRepository.findByIdAndUserEmail(id, email)
+                .orElseThrow(() -> new RuntimeException("Routine not found"));
+
+        routineRepository.delete(routine);
     }
 }
