@@ -2,6 +2,7 @@ package com.example.Project400Backend.Models;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
+
 import java.util.List;
 
 @Entity
