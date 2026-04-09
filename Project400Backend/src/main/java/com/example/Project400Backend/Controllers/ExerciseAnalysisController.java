@@ -20,7 +20,7 @@ import java.util.List;
 public class ExerciseAnalysisController {
 
     private static final long MAX_IMAGE_SIZE = 10 * 1024 * 1024;
-    private static final long MAX_VIDEO_SIZE = 50 * 1024 * 1024;
+    private static final long MAX_VIDEO_SIZE = 150 * 1024 * 1024;
 
     private final ExerciseSubmissionRepository submissionRepository;
     private final UserRepository userRepository;
@@ -127,7 +127,7 @@ public class ExerciseAnalysisController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File must be a video");
         }
         if (file.getSize() > MAX_VIDEO_SIZE) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Video exceeds 50MB limit");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Video exceeds 150MB limit");
         }
     }
 

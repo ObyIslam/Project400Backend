@@ -39,7 +39,36 @@ public class ExerciseAnalysisService {
         submissionRepository.save(submission);
 
         try {
-            MockAnalysisResult result = createMockResult(submission.getExerciseType());
+            org.springframework.web.client.RestTemplate restTemplate =
+                    new org.springframework.web.client.RestTemplate();
+
+            Map<String, Object> request = new LinkedHashMap<>();
+            request.put("file_path", submission.getStoragePath());
+            request.put("exercise_type", submission.getExerciseType().name());
+            request.put("media_type", submission.getMediaType().name());
+            request.put("camera_angle", submission.getCameraAngle());
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+
+            org.springframework.http.HttpEntity<Map<String, Object>> entity =
+                    new org.springframework.http.HttpEntity<>(request, headers);
+
+            org.springframework.http.ResponseEntity<Map> response = restTemplate.postForEntity(
+                    "http://127.0.0.1:8001/analyze",
+                    entity,
+                    Map.class
+            );
+
+            Map body = response.getBody();
+            if (body == null) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Empty AI response");
+            }
+
+            Integer score = ((Number) body.get("score")).intValue();
+            List<String> strengths = (List<String>) body.get("strengths");
+            List<String> improvements = (List<String>) body.get("improvements");
+            Map<String, Object> metrics = (Map<String, Object>) body.get("metrics");
 
             ExerciseAnalysis analysis = submission.getAnalysis();
             if (analysis == null) {
@@ -47,16 +76,17 @@ public class ExerciseAnalysisService {
                 analysis.setSubmission(submission);
             }
 
-            analysis.setOverallScore(result.overallScore());
-            analysis.setStrengthsJson(writeJson(result.strengths()));
-            analysis.setImprovementsJson(writeJson(result.improvements()));
-            analysis.setRawMetricsJson(writeJson(result.metrics()));
+            analysis.setOverallScore(score);
+            analysis.setStrengthsJson(writeJson(strengths));
+            analysis.setImprovementsJson(writeJson(improvements));
+            analysis.setRawMetricsJson(writeJson(metrics));
             analysisRepository.save(analysis);
 
             submission.setAnalysis(analysis);
             submission.setProcessedAt(LocalDateTime.now());
             submission.setStatus(SubmissionStatus.COMPLETED);
             return submissionRepository.save(submission);
+
         } catch (Exception e) {
             submission.setStatus(SubmissionStatus.FAILED);
             submission.setProcessedAt(LocalDateTime.now());
